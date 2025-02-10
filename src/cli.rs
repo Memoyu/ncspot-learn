@@ -1,6 +1,7 @@
 use crate::config::{user_cache_directory, user_configuration_directory};
 
 /// Print platform info like which platform directories will be used.
+/// 打印平台信息，例如：配置路径、缓存路径
 pub fn info() -> Result<(), String> {
     let user_configuration_directory = user_configuration_directory();
     let user_cache_directory = user_cache_directory();

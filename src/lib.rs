@@ -9,7 +9,10 @@ pub const USER_STATE_FILE_NAME: &str = "userstate.cbor";
 /// Return the [Command](clap::Command) that models the program's command line arguments. The
 /// command can be used to parse the actual arguments passed to the program, or to automatically
 /// generate a man page using clap's mangen package.
+/// 解析返回命令行参数，使用clap库实现
 pub fn program_arguments() -> clap::Command {
+
+    // 音频后端获取，格式化成输出内容
     let backends = {
         let backends: Vec<&str> = audio_backend::BACKENDS.iter().map(|b| b.0).collect();
         format!("Audio backends: {}", backends.join(", "))

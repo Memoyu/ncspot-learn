@@ -28,9 +28,11 @@ use crate::mpris::MprisManager;
 use crate::ipc::{self, IpcSocket};
 
 /// Set up the global logger to log to `filename`.
+/// 配置全局日志，输出到`filename`文件中
 pub fn setup_logging(filename: &Path) -> Result<(), fern::InitError> {
     fern::Dispatch::new()
         // Perform allocation-free log formatting
+        // 输出日志格式化
         .format(|out, message, record| {
             out.finish(format_args!(
                 "{} [{}] [{}] {}",

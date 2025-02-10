@@ -170,6 +170,7 @@ impl Default for UserState {
 }
 
 /// Configuration files are read/written relative to this directory.
+/// 基路径，用于数据缓存
 static BASE_PATH: RwLock<Option<PathBuf>> = RwLock::new(None);
 
 /// The complete configuration (state + user configuration) of ncspot.
@@ -348,6 +349,7 @@ pub fn cache_path(file: &str) -> PathBuf {
 }
 
 /// Set the configuration base path. All configuration files are read/written relative to this path.
+/// 配置基路径
 pub fn set_configuration_base_path(base_path: Option<PathBuf>) {
     if let Some(basepath) = base_path {
         if !basepath.exists() {
