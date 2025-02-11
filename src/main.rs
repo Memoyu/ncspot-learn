@@ -80,6 +80,7 @@ fn main() -> Result<(), String> {
                 };
 
             // Start the application event loop.
+            // 运行应用
             application.run()
         }
     }?;

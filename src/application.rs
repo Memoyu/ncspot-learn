@@ -95,7 +95,9 @@ impl Application {
             )
             .unwrap();
 
+        // 获取配置
         let configuration = Arc::new(Config::new(configuration_file_path));
+        // 获取spotify授权凭证
         let credentials = authentication::get_credentials(&configuration)?;
         let theme = configuration.build_theme();
 

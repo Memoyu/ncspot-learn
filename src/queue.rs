@@ -15,14 +15,15 @@ use crate::spotify::PlayerEvent;
 use crate::spotify::Spotify;
 
 /// Repeat behavior for the [Queue].
+/// 循环枚举
 #[derive(Display, Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum RepeatSetting {
     #[serde(rename = "off")]
-    None,
+    None, // 不循环
     #[serde(rename = "playlist")]
-    RepeatPlaylist,
+    RepeatPlaylist, // 循环播放列表
     #[serde(rename = "track")]
-    RepeatTrack,
+    RepeatTrack, // 循环单曲
 }
 
 /// Events that are specific to the [Queue].

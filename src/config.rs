@@ -20,9 +20,13 @@ pub const DEFAULT_COMMAND_KEY: char = ':';
 /// The playback state when ncspot is started.
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum PlaybackState {
+    // 播放
     Playing,
+    // 暂停
     Paused,
+    // 停止
     Stopped,
+    // 默认
     Default,
 }
 
@@ -73,6 +77,7 @@ impl NotificationFormat {
 }
 
 /// The configuration of ncspot.
+/// 配置
 #[derive(Clone, Serialize, Deserialize, Debug, Default)]
 pub struct ConfigValues {
     pub command_key: Option<char>,
@@ -146,12 +151,19 @@ pub struct QueueState {
 /// Runtime state that should be persisted accross sessions.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UserState {
+    // 音量
     pub volume: u16,
+    // 随机播放
     pub shuffle: bool,
+    // 循环
     pub repeat: queue::RepeatSetting,
+    //
     pub queuestate: QueueState,
+    // 播放列表
     pub playlist_orders: HashMap<String, SortingOrder>,
+    // 缓存版本
     pub cache_version: u16,
+    // 播放状态
     pub playback_state: PlaybackState,
 }
 
@@ -187,8 +199,11 @@ impl Config {
     /// Generate the configuration from the user configuration file and the runtime state file.
     /// `filename` can be used to look for a differently named configuration file.
     pub fn new(filename: Option<String>) -> Self {
+        // 没有传入配置文件名时则使用默认
         let filename = filename.unwrap_or(CONFIGURATION_FILE_NAME.to_owned());
+        // 加载配置数据
         let values = load(&filename).unwrap_or_else(|e| {
+            // 加载不成功则结束程序
             eprint!(
                 "There is an error in your configuration file at {}:\n\n{e}",
                 user_configuration_directory()
@@ -201,12 +216,13 @@ impl Config {
             process::exit(1);
         });
 
+        // 获取用户缓存数据，例如：音量、播放进度等
         let mut userstate = {
             let path = config_path(USER_STATE_FILE_NAME);
             CBOR.load_or_generate_default(path, || Ok(UserState::default()), true)
                 .expect("could not load user state")
         };
-
+        // 使用配置替换用户缓存配置
         if let Some(shuffle) = values.shuffle {
             userstate.shuffle = shuffle;
         }
@@ -279,14 +295,25 @@ impl Config {
 }
 
 /// Parse the configuration file with name `filename` at the configuration base path.
+/// 解析配置文件
 fn load(filename: &str) -> Result<ConfigValues, String> {
+    // 获取完整的配置路径
     let path = config_path(filename);
+    // 解析配置文件
     TOML.load_or_generate_default(path, || Ok(ConfigValues::default()), false)
 }
 
 /// Returns the plaform app directories for ncspot if they could be determined,
 /// or an error otherwise.
 pub fn try_proj_dirs() -> Result<AppDirs, String> {
+    // 如果配置了地址，则使用配置的，否则使用AppDirs::new初始化的路径
+    // 默认
+    // AppDirs {
+    //     cache_dir: "/home/cjbassi/.cache/name",
+    //     config_dir: "/home/cjbassi/.config/name",
+    //     data_dir: "/home/cjbassi/.local/share/name",
+    //     state_dir: "/home/cjbassi/.local/state/name"
+    // }
     match *BASE_PATH
         .read()
         .map_err(|_| String::from("Poisoned RWLock"))?
