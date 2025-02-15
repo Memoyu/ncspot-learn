@@ -33,17 +33,20 @@ impl EventManager {
 
     /// Return a non-blocking iterator over the messages awaiting handling. Calling `next()` on the
     /// iterator never blocks.
+    /// 待处理消息的迭代器
     pub fn msg_iter(&self) -> TryIter<Event> {
         self.rx.try_iter()
     }
 
     /// Send a new event to be handled.
+    /// 发送事件
     pub fn send(&self, event: Event) {
         self.tx.send(event).unwrap();
         self.trigger();
     }
 
     /// Send a no-op to the Cursive event loop to trigger immediate processing of events.
+    /// 出发cursive发送no-op回调
     pub fn trigger(&self) {
         self.cursive_sink.send(Box::new(Cursive::noop)).unwrap();
     }

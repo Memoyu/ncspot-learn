@@ -80,9 +80,15 @@ impl Worker {
     }
 
     pub async fn run_loop(&mut self) {
+        // ui 刷新频率
         let mut ui_refresh = time::interval(Duration::from_millis(400));
 
+        // 循环执行tokio::select!，
+        // 如果命令队列中有命令，则执行命令
+        // 如果播放器事件队列中有事件，则执行触发事件
+        //
         loop {
+            // 判断session是否失效
             if self.session.is_invalid() {
                 info!("Librespot session invalidated, terminating worker");
                 self.events.send(Event::Player(PlayerEvent::Stopped));
@@ -90,7 +96,9 @@ impl Worker {
             }
 
             tokio::select! {
+                // 命令处理（命令触发player event）
                 cmd = self.commands.next() => match cmd {
+                    // 加载歌曲
                     Some(WorkerCommand::Load(playable, start_playing, position_ms)) => {
                         match SpotifyId::from_uri(&playable.uri()) {
                             Ok(id) => {
@@ -108,37 +116,47 @@ impl Worker {
                             }
                         }
                     }
+                    // 播放
                     Some(WorkerCommand::Play) => {
                         self.player.play();
                     }
+                    // 暂停
                     Some(WorkerCommand::Pause) => {
                         self.player.pause();
                     }
+                    // 停止
                     Some(WorkerCommand::Stop) => {
                         self.player.stop();
                     }
+                    // TODO:不太清楚seek干啥
                     Some(WorkerCommand::Seek(pos)) => {
                         self.player.seek(pos);
                     }
+                    // 设置音量
                     Some(WorkerCommand::SetVolume(volume)) => {
                         self.mixer.set_volume(volume);
                     }
+                    // 请求spotify token
                     Some(WorkerCommand::RequestToken(sender)) => {
                         self.token_task = Box::pin(Self::get_token(self.session.clone(), sender));
                     }
+                    // 预加载歌曲
                     Some(WorkerCommand::Preload(playable)) => {
                         if let Ok(id) = SpotifyId::from_uri(&playable.uri()) {
                             debug!("Preloading {:?}", id);
                             self.player.preload(id);
                         }
                     }
+                    // 关闭
                     Some(WorkerCommand::Shutdown) => {
                         self.player.stop();
                         self.session.shutdown();
                     }
                     None => info!("empty stream")
                 },
+                // 播放器事件处理
                 event = self.player_events.next() => match event {
+                    // 播放
                     Some(LibrespotPlayerEvent::Playing {
                         play_request_id: _,
                         track_id: _,
@@ -150,6 +168,7 @@ impl Worker {
                             .send(Event::Player(PlayerEvent::Playing(playback_start)));
                         self.player_status = PlayerStatus::Playing;
                     }
+                    // 暂停
                     Some(LibrespotPlayerEvent::Paused {
                         play_request_id: _,
                         track_id: _,
@@ -160,13 +179,16 @@ impl Worker {
                             .send(Event::Player(PlayerEvent::Paused(position)));
                         self.player_status = PlayerStatus::Paused;
                     }
+                    // 停止
                     Some(LibrespotPlayerEvent::Stopped { .. }) => {
                         self.events.send(Event::Player(PlayerEvent::Stopped));
                         self.player_status = PlayerStatus::Stopped;
                     }
+                    // 歌曲结束
                     Some(LibrespotPlayerEvent::EndOfTrack { .. }) => {
                         self.events.send(Event::Player(PlayerEvent::FinishedTrack));
                     }
+                    // 开始预加载下一首歌曲
                     Some(LibrespotPlayerEvent::TimeToPreloadNextTrack { .. }) => {
                         self.events
                             .send(Event::Queue(QueueEvent::PreloadTrackRequest));
@@ -192,11 +214,13 @@ impl Worker {
                     },
                 },
                 // Update animated parts of the UI (e.g. statusbar during playback).
+                // ui 刷新
                 _ = ui_refresh.tick() => {
                     if !matches!(self.player_status, PlayerStatus::Stopped) {
                         self.events.trigger();
                     }
                 },
+                // token更新
                 _ = self.token_task.as_mut() => {
                     info!("token updated!");
                     self.token_task = Box::pin(futures::future::pending());

@@ -99,13 +99,17 @@ impl Application {
         let configuration = Arc::new(Config::new(configuration_file_path));
         // 获取spotify授权凭证
         let credentials = authentication::get_credentials(&configuration)?;
+        // 加载主题数据
         let theme = configuration.build_theme();
 
         println!("Connecting to Spotify..");
 
         // DON'T USE STDOUT AFTER THIS CALL!
+        // 在此之后不建议再使用标准输出流
+        // 构建cursive窗口实例
         let mut cursive = create_cursive().map_err(|error| error.to_string())?;
 
+        // 设置主题
         cursive.set_theme(theme.clone());
 
         #[cfg(all(unix, feature = "pancurses_backend"))]
@@ -113,8 +117,10 @@ impl Application {
             libc::raise(libc::SIGTSTP);
         });
 
+        // 构建事件管理器实例
         let event_manager = EventManager::new(cursive.cb_sink().clone());
 
+        // 构建spotify实例
         let mut spotify =
             spotify::Spotify::new(event_manager.clone(), credentials, configuration.clone())?;
 

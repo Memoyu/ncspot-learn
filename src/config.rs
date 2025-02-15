@@ -248,6 +248,7 @@ impl Config {
     }
 
     /// Get the runtime user state values.
+    /// 获取用户状态
     pub fn state(&self) -> RwLockReadGuard<UserState> {
         self.state.read().unwrap()
     }
@@ -279,6 +280,7 @@ impl Config {
     }
 
     /// Create a [Theme] from the user supplied theme in the configuration file.
+    /// 从配置中获取主题配置
     pub fn build_theme(&self) -> Theme {
         crate::theme::load(&self.values().theme)
     }

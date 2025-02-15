@@ -39,6 +39,7 @@ static OAUTH_SCOPES: &[&str] = &[
 /// credentials are available it will initiate the OAuth2 login process.
 pub fn get_credentials(configuration: &Config) -> Result<RespotCredentials, String> {
     let mut credentials = {
+        // 获取librespot凭证缓存，根据配置路径获取
         let cache = Cache::new(Some(config::cache_path("librespot")), None, None, None)
             .expect("Could not create librespot cache");
         let cached_credentials = cache.credentials();
@@ -54,6 +55,7 @@ pub fn get_credentials(configuration: &Config) -> Result<RespotCredentials, Stri
         }
     };
 
+    // 一直尝试登录
     while let Err(error) = Spotify::test_credentials(configuration, credentials.clone()) {
         let error_msg = format!("{error}");
         credentials = credentials_prompt(Some(error_msg))?;
@@ -71,6 +73,10 @@ fn credentials_prompt(error_message: Option<String>) -> Result<RespotCredentials
 
 pub fn create_credentials() -> Result<RespotCredentials, String> {
     println!("To login you need to perform OAuth2 authorization using your web browser\n");
+
+    // 需要使用浏览器访问授权，此处会打印链接
+    // 内部启动socket服务器，监听CLIENT_REDIRECT_URI请求，用于接收浏览器回调
+    // get_access_token 返回 Result<OAuthToken, OAuthError>，再map转换成Credentials
     get_access_token(
         SPOTIFY_CLIENT_ID,
         CLIENT_REDIRECT_URI,

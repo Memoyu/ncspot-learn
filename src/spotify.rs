@@ -32,9 +32,11 @@ use crate::spotify_worker::{Worker, WorkerCommand};
 
 /// One percent of the maximum supported [Player] volume, used when setting the volume to a certain
 /// percent.
+/// 播放器音量百分比
 pub const VOLUME_PERCENT: u16 = ((u16::MAX as f64) * 1.0 / 100.0) as u16;
 
 /// Events sent by the [Player].
+/// 播放器事件发送
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub enum PlayerEvent {
     Playing(SystemTime),
@@ -44,22 +46,30 @@ pub enum PlayerEvent {
 }
 
 /// Wrapper around a worker thread that exposes methods to safely control it.
+/// 包装工作线程
 #[derive(Clone)]
 pub struct Spotify {
     events: EventManager,
     /// The credentials for the currently logged in user, used to authenticate to the Spotify API.
+    /// 适用于 Linux 生态系统MPRIS2 兼容的媒体播放器
     #[cfg(feature = "mpris")]
     mpris: Arc<std::sync::Mutex<Option<MprisManager>>>,
+    /// 当前登录用户凭证
     credentials: Credentials,
+    /// 配置信息
     cfg: Arc<config::Config>,
     /// Playback status of the [Player] owned by the worker thread.
+    /// 播放状态
     status: Arc<RwLock<PlayerEvent>>,
     pub api: WebApi,
     /// The amount of the current [Playable] that had elapsed when last paused.
+    /// 上次暂停时已经播放的进度
     elapsed: Arc<RwLock<Option<Duration>>>,
     /// The amount of the current [Playable] that has been played in total.
+    /// 总播放进度
     since: Arc<RwLock<Option<SystemTime>>>,
     /// Channel to send commands to the worker thread.
+    /// 向工作线程发送指令通道
     channel: Arc<RwLock<Option<mpsc::UnboundedSender<WorkerCommand>>>>,
 }
 
@@ -84,16 +94,21 @@ impl Spotify {
 
         let (user_tx, user_rx) = oneshot::channel();
         spotify.start_worker(Some(user_tx))?;
+        // 接收登录用户的用户名
         let user = ASYNC_RUNTIME.get().unwrap().block_on(user_rx).ok();
+
+        // 设置音量
         let volume = cfg.state().volume;
         spotify.set_volume(volume, true);
 
+        // 设置Spotify WebApi的worker通道
         spotify.api.set_worker_channel(spotify.channel.clone());
+        // 更新token
         spotify
             .api
             .update_token()
             .map(move |h| ASYNC_RUNTIME.get().unwrap().block_on(h).ok());
-
+        // 设置Spotify WebApi用户名
         spotify.api.set_user(user);
 
         Ok(spotify)
@@ -101,6 +116,8 @@ impl Spotify {
 
     /// Start the worker thread. If `user_tx` is given, it will receive the username of the logged
     /// in user.
+    /// 启动工作线程
+    /// user_tx 用于接收已登陆用户的用户名
     pub fn start_worker(
         &self,
         user_tx: Option<oneshot::Sender<String>>,
@@ -110,10 +127,11 @@ impl Spotify {
         let worker_channel = self.channel.clone();
         let cfg = self.cfg.clone();
         let events = self.events.clone();
-        let volume = self.volume();
+        let volume = self.volume(); // 获取配置音量
         let credentials = self.credentials.clone();
         let backend_name = cfg.values().backend.clone();
         let backend = Self::init_backend(backend_name)?;
+        // 启动工作线程处理
         ASYNC_RUNTIME.get().unwrap().spawn(Self::worker(
             worker_channel,
             events,
@@ -128,6 +146,7 @@ impl Spotify {
     }
 
     /// Generate the librespot [SessionConfig] used when creating a [Session].
+    /// 构建librespot SessionConfig，并配置代理
     pub fn session_config(cfg: &config::Config) -> SessionConfig {
         let mut session_config = librespot_core::SessionConfig {
             client_id: SPOTIFY_CLIENT_ID.to_string(),
@@ -140,6 +159,7 @@ impl Spotify {
             }
             Err(_) => debug!("No HTTP proxy set"),
         }
+        // 若配置了ap_port，则赋值session_config
         if let Some(ap_port) = cfg.values().ap_port {
             session_config.ap_port = Some(ap_port)
         }
@@ -172,6 +192,8 @@ impl Spotify {
         } else {
             Some(librespot_cache_path.join("files"))
         };
+
+        // 构建librespot cache
         let cache = Cache::new(
             Some(librespot_cache_path.clone()),
             Some(librespot_cache_path.join("volume")),
@@ -188,6 +210,7 @@ impl Spotify {
     }
 
     /// Create and initialize the requested audio backend.
+    /// 初始化请求音频后端
     fn init_backend(desired_backend: Option<String>) -> Result<SinkBuilder, Box<dyn Error>> {
         let backend = if let Some(name) = desired_backend {
             audio_backend::BACKENDS
@@ -226,12 +249,14 @@ impl Spotify {
         volume: u16,
         backend: SinkBuilder,
     ) {
+        // 配置比特率
         let bitrate_str = cfg.values().bitrate.unwrap_or(320).to_string();
         let bitrate = Bitrate::from_str(&bitrate_str);
         if bitrate.is_err() {
             error!("invalid bitrate, will use 320 instead")
         }
 
+        // 播放器配置
         let player_config = PlayerConfig {
             gapless: cfg.values().gapless.unwrap_or(true),
             bitrate: bitrate.unwrap_or(Bitrate::Bitrate320),
@@ -239,17 +264,21 @@ impl Spotify {
             normalisation_pregain_db: cfg.values().volnorm_pregain.unwrap_or(0.0),
             ..Default::default()
         };
-
+        // 构建 spotify session
         let session = Self::create_session(&cfg, credentials)
             .await
             .expect("Could not create session");
+        // 发送管道信息
         user_tx.map(|tx| tx.send(session.username()));
 
+        // 获取 softvol mixer，并设置音量
         let create_mixer = librespot_playback::mixer::find(Some(SoftMixer::NAME))
             .expect("could not create softvol mixer");
+        // create_mixer 是一个fn，需要调用配置
         let mixer = create_mixer(MixerConfig::default());
         mixer.set_volume(volume);
 
+        // 构建播放器实例
         let audio_format: librespot_playback::config::AudioFormat = Default::default();
         let player = Player::new(
             player_config,
@@ -268,6 +297,7 @@ impl Spotify {
             mixer,
         );
         debug!("worker thread ready.");
+        // 启动主工作线程
         worker.run_loop().await;
 
         error!("worker thread died, requesting restart");

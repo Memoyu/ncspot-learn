@@ -22,19 +22,24 @@ use crate::model::track::Track;
 use crate::spotify::Spotify;
 
 /// Cached tracks database filename.
+/// 曲目缓存db
 const CACHE_TRACKS: &str = "tracks.db";
 
 /// Cached albums database filename.
+/// 专辑缓存db
 const CACHE_ALBUMS: &str = "albums.db";
 
 /// Cached artists database filename.
+/// 歌手缓存db
 const CACHE_ARTISTS: &str = "artists.db";
 
 /// Cached playlists database filename.
+/// 播放列表缓存db
 const CACHE_PLAYLISTS: &str = "playlists.db";
 
 /// The user library with all their saved tracks, albums, playlists... High level interface to the
 /// Spotify API used to manage items in the user library.
+/// 用户库，包含所有已保存的曲目、专辑、播放列表... 高级接口，用于管理用户库中的曲目、专辑、播放列表等。
 #[derive(Clone)]
 pub struct Library {
     pub tracks: Arc<RwLock<Vec<Track>>>,
@@ -52,6 +57,7 @@ pub struct Library {
 
 impl Library {
     pub fn new(ev: EventManager, spotify: Spotify, cfg: Arc<Config>) -> Self {
+        // 获取登录用户信息
         let current_user = spotify.api.current_user().ok();
         let user_id = current_user.as_ref().map(|u| u.id.id().to_string());
         let display_name = current_user.as_ref().and_then(|u| u.display_name.clone());
@@ -75,6 +81,7 @@ impl Library {
     }
 
     /// Load cached items from the file at `cache_path` into the given `store`.
+    /// 加载指定的缓存db数据
     fn load_cache<T: DeserializeOwned>(&self, cache_path: &Path, store: &mut Vec<T>) {
         let saved_cache_version = self.cfg.state().cache_version;
         if saved_cache_version < CACHE_VERSION {
@@ -88,6 +95,7 @@ impl Library {
         if let Ok(contents) = std::fs::read_to_string(cache_path) {
             debug!("loading cache from {}", cache_path.display());
             // Parse from in-memory string instead of directly from the file because it's faster.
+            // db文件中存的是json数据
             let parsed = serde_json::from_str::<Vec<_>>(&contents);
             match parsed {
                 Ok(cache) => {
@@ -96,10 +104,12 @@ impl Library {
                         cache_path.display(),
                         cache.len()
                     );
+                    // 清空当前数据，再附加数据
                     store.clear();
                     store.extend(cache);
 
                     // force refresh of UI (if visible)
+                    // 强制刷新UI
                     self.trigger_redraw();
                 }
                 Err(e) => {
@@ -110,6 +120,7 @@ impl Library {
     }
 
     /// Save the items from `store` in the file at `cache_path`.
+    /// 写入缓存数据到指定的路径文件
     fn save_cache<T: Serialize>(&self, cache_path: &Path, store: &[T]) {
         let cache_file = File::create(cache_path).unwrap();
         let serialize_result = serde_json::to_writer(cache_file, store);
@@ -191,19 +202,24 @@ impl Library {
     }
 
     /// Update the local library and its cache on disk.
+    /// 更新本地缓存的library信息
     pub fn update_library(&self) {
         *self.is_done.write().unwrap() = false;
 
         let library = self.clone();
+        // 开启新线程执行
         thread::spawn(move || {
             let t_tracks = {
                 let library = library.clone();
                 thread::spawn(move || {
+                    // 加载歌曲缓存
                     library.load_cache(
                         &config::cache_path(CACHE_TRACKS),
                         library.tracks.write().unwrap().as_mut(),
                     );
+                    // 请求歌曲列表
                     library.fetch_tracks();
+                    // 写入请求的歌曲数据到缓存文件
                     library.save_cache(
                         &config::cache_path(CACHE_TRACKS),
                         &library.tracks.read().unwrap(),
@@ -214,6 +230,7 @@ impl Library {
             let t_albums = {
                 let library = library.clone();
                 thread::spawn(move || {
+                    // 加载专辑缓存
                     library.load_cache(
                         &config::cache_path(CACHE_ALBUMS),
                         library.albums.write().unwrap().as_mut(),
@@ -229,6 +246,7 @@ impl Library {
             let t_artists = {
                 let library = library.clone();
                 thread::spawn(move || {
+                    // 加载歌手缓存
                     library.load_cache(
                         &config::cache_path(CACHE_ARTISTS),
                         library.artists.write().unwrap().as_mut(),
@@ -240,6 +258,7 @@ impl Library {
             let t_playlists = {
                 let library = library.clone();
                 thread::spawn(move || {
+                    // 加载歌单缓存
                     library.load_cache(
                         &config::cache_path(CACHE_PLAYLISTS),
                         library.playlists.write().unwrap().as_mut(),
@@ -362,6 +381,7 @@ impl Library {
     }
 
     /// Fetch the artists from the web API and save them to the local library.
+    /// 通过web api获取用户关注的歌手
     fn fetch_artists(&self) {
         let mut artists: Vec<Artist> = Vec::new();
         let mut last: Option<&str> = None;
@@ -389,6 +409,7 @@ impl Library {
         let mut store = self.artists.write().unwrap();
 
         for mut artist in artists {
+            // 返回指定artist.id在store中的index
             let pos = store.iter().position(|a| a.id == artist.id);
             if let Some(i) = pos {
                 store[i].is_followed = true;
@@ -417,6 +438,7 @@ impl Library {
     }
 
     /// Fetch the albums from the web API and store them in the local library.
+    /// 通过web api获取用户保存的专辑
     fn fetch_albums(&self) {
         let mut albums: Vec<Album> = Vec::new();
         let mut i = 0u32;
@@ -443,11 +465,17 @@ impl Library {
             }
         }
 
+        // 通过指定key排序，但是不保证每次排序都一致（相同key时可能会）
         albums.sort_unstable_by_key(|album| {
+            // 获取专辑第一个歌手的名字，并去掉调指定前缀
             let album_artist = album.artists[0]
-                .strip_prefix("The ")
-                .unwrap_or(&album.artists[0]);
+                .strip_prefix("The ") // 去掉前缀
+                .unwrap_or(&album.artists[0]); // 去掉失败则直接取值
+
+            // 获取专辑的标题，并去掉调指定前缀
             let album_title = album.title.strip_prefix("The ").unwrap_or(&album.title);
+
+            // 转小写组成key,用于排序
             format!(
                 "{}{}{}",
                 album_artist.to_lowercase(),
@@ -460,11 +488,13 @@ impl Library {
     }
 
     /// Fetch the tracks from the web API and save them in the local library.
+    /// 通过web api获取用户保存的歌曲
     fn fetch_tracks(&self) {
         let mut tracks = Vec::new();
         let mut i = 0u32;
 
         loop {
+            // 获取用户歌曲分页数据
             let page = self
                 .spotify
                 .api
@@ -483,6 +513,8 @@ impl Library {
                 // If first page matches the first items in store and total is
                 // identical, assume list is unchanged.
 
+                // 本地数据总数与请求返回数据的总数相同，且数据的id都相同
+                // 则认为数据没有变化
                 let store = self.tracks.read().unwrap();
 
                 if page.total as usize == store.len()
@@ -492,12 +524,15 @@ impl Library {
                         .enumerate()
                         .any(|(i, t)| t.track.id.as_ref().map(|id| id.to_string()) != store[i].id)
                 {
+                    // 直接函数返回
                     return;
                 }
             }
 
+            // 将数据追加到tracks中
             tracks.extend(page.items.iter().map(|t| t.into()));
 
+            // 没有下一页了，结束循环
             if page.next.is_none() {
                 break;
             }
@@ -912,6 +947,7 @@ impl Library {
     }
 
     /// Force redraw the user interface.
+    /// 触发重绘UI
     pub fn trigger_redraw(&self) {
         self.ev.trigger();
     }

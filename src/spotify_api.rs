@@ -81,6 +81,7 @@ impl WebApi {
     }
 
     /// Update the authentication token when it expires.
+    /// 更新身份认证token
     pub fn update_token(&self) -> Option<JoinHandle<()>> {
         {
             let token_expiration = self.token_expiration.read().unwrap();
@@ -88,6 +89,7 @@ impl WebApi {
             let delta = *token_expiration - now;
 
             // token is valid for 5 more minutes, renewal is not necessary yet
+            // token提前5分钟过期
             if delta.num_seconds() > 60 * 5 {
                 return None;
             }
@@ -98,10 +100,12 @@ impl WebApi {
         let (token_tx, token_rx) = std::sync::mpsc::channel();
         let cmd = WorkerCommand::RequestToken(token_tx);
         if let Some(channel) = self.worker_channel.read().unwrap().as_ref() {
+            // 向spotify工作线程发送请求token命令
             channel.send(cmd).unwrap();
             let api_token = self.api.token.clone();
             let api_token_expiration = self.token_expiration.clone();
             Some(ASYNC_RUNTIME.get().unwrap().spawn_blocking(move || {
+                // 接收token通道消息
                 if let Ok(Some(token)) = token_rx.recv() {
                     *api_token.lock().unwrap() = Some(Token {
                         access_token: token.access_token,
@@ -632,6 +636,7 @@ impl WebApi {
     }
 
     /// Get the user's saved tracks, starting at the given `offset`. The result is paginated.
+    /// 获取用户保存的曲目，使用offset分页
     pub fn current_user_saved_tracks(&self, offset: u32) -> Result<Page<SavedTrack>, ()> {
         self.api_with_retry(|api| {
             api.current_user_saved_tracks_manual(Some(Market::FromToken), Some(50), Some(offset))
@@ -738,6 +743,7 @@ impl WebApi {
     }
 
     /// Get details about the logged in user.
+    /// 获取当前登录用户的详情
     pub fn current_user(&self) -> Result<PrivateUser, ()> {
         self.api_with_retry(|api| api.current_user()).ok_or(())
     }
