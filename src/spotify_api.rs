@@ -411,6 +411,7 @@ impl WebApi {
     }
 
     /// Get the tracks in the playlist given by `playlist_id`.
+    /// 构建获取歌单曲目分页列表的ApiResult
     pub fn user_playlist_tracks(&self, playlist_id: &str) -> ApiResult<Playable> {
         const MAX_LIMIT: u32 = 100;
         let spotify = self.clone();

@@ -124,12 +124,14 @@ impl Application {
         let mut spotify =
             spotify::Spotify::new(event_manager.clone(), credentials, configuration.clone())?;
 
+        // 加载library数据，构建实例
         let library = Arc::new(Library::new(
             event_manager.clone(),
             spotify.clone(),
             configuration.clone(),
         ));
 
+        // 构建播放列表实例
         let queue = Arc::new(queue::Queue::new(
             spotify.clone(),
             configuration.clone(),
@@ -148,6 +150,7 @@ impl Application {
         spotify.set_mpris(mpris_manager.clone());
 
         // Load the last played track into the player
+        // 将上次播放的歌曲加载到播放器中
         let playback_state = configuration.state().playback_state.clone();
         let queue_state = configuration.state().queuestate.clone();
 

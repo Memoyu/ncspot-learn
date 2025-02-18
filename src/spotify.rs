@@ -394,6 +394,7 @@ impl Spotify {
     }
 
     /// Toggle playback (play/pause) of the [Player].
+    /// 切换播放状态（播放/暂停）
     pub fn toggleplayback(&self) {
         match self.get_current_status() {
             PlayerEvent::Playing(_) => self.pause(),

@@ -29,6 +29,7 @@ pub struct Playlist {
 }
 
 impl Playlist {
+    /// 加载歌单曲目
     pub fn load_tracks(&mut self, spotify: &Spotify) {
         if self.tracks.is_some() {
             return;
@@ -37,8 +38,11 @@ impl Playlist {
         self.tracks = Some(self.get_all_tracks(spotify));
     }
 
+    /// 获取歌单所有曲目
     fn get_all_tracks(&self, spotify: &Spotify) -> Vec<Playable> {
+        // 构建歌单曲目获取的请求ApiResult
         let tracks_result = spotify.api.user_playlist_tracks(&self.id);
+        // 判断请求是否已经是最后一页，否则继续加载
         while !tracks_result.at_end() {
             tracks_result.next();
         }

@@ -140,11 +140,16 @@ pub struct SortingOrder {
 }
 
 /// The runtime state of the music queue.
+/// 播放列表状态
 #[derive(Serialize, Default, Deserialize, Debug, Clone)]
 pub struct QueueState {
+    // 当前播放曲目
     pub current_track: Option<usize>,
+    // 随机播放歌曲排序
     pub random_order: Option<Vec<usize>>,
+    // 歌曲播放进度
     pub track_progress: std::time::Duration,
+    // 播放列表
     pub queue: Vec<Playable>,
 }
 
@@ -157,9 +162,9 @@ pub struct UserState {
     pub shuffle: bool,
     // 循环
     pub repeat: queue::RepeatSetting,
-    //
+    // 播放列表状态
     pub queuestate: QueueState,
-    // 播放列表
+    // 歌单列表
     pub playlist_orders: HashMap<String, SortingOrder>,
     // 缓存版本
     pub cache_version: u16,

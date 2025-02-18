@@ -76,6 +76,7 @@ impl Library {
             cfg,
         };
 
+        // 更新library数据
         library.update_library();
         library
     }
@@ -136,13 +137,14 @@ impl Library {
             .read()
             .unwrap()
             .iter()
-            .find(|local| local.id == remote.id)
+            .find(|local: &&Playlist| local.id == remote.id)
             .map(|local| local.snapshot_id != remote.snapshot_id)
             .unwrap_or(true)
     }
 
     /// Append `updated` to the local playlists or update the local version if it exists. Return the
     /// index of the appended/updated playlist.
+    /// 添加/更新到本地的歌单列表，返回对应的index
     fn append_or_update(&self, updated: Playlist) -> usize {
         let mut store = self.playlists.write().unwrap();
         for (index, local) in store.iter_mut().enumerate() {
@@ -274,6 +276,7 @@ impl Library {
             let t_shows = {
                 let library = library.clone();
                 thread::spawn(move || {
+                    // 加载博客数据
                     library.fetch_shows();
                 })
             };
@@ -281,7 +284,9 @@ impl Library {
             t_tracks.join().unwrap();
             t_artists.join().unwrap();
 
+            // 填充歌手数据
             library.populate_artists();
+            // 写入歌手缓存数据到文件
             library.save_cache(
                 &config::cache_path(CACHE_ARTISTS),
                 &library.artists.read().unwrap(),
@@ -294,11 +299,13 @@ impl Library {
             let mut is_done = library.is_done.write().unwrap();
             *is_done = true;
 
+            // 触发重绘
             library.ev.trigger();
         });
     }
 
     /// Fetch the shows from the web API and save them to the local library.
+    /// 通过web api获取用户播客列表
     fn fetch_shows(&self) {
         debug!("loading shows");
 
@@ -326,6 +333,7 @@ impl Library {
 
     /// Fetch the playlists from the web API and save them to the local library. This synchronizes
     /// the local version with the remote, pruning removed playlists in the process.
+    /// 通过web api获取用户歌单列表
     fn fetch_playlists(&self) {
         debug!("loading playlists");
         let mut stale_lists = self.playlists.read().unwrap().clone();
@@ -338,17 +346,21 @@ impl Library {
                 list_order.push(remote.id.clone());
 
                 // remove from stale playlists so we won't prune it later on
+                // 删除缓存中已经被删除的数据
                 if let Some(index) = stale_lists.iter().position(|x| x.id == remote.id) {
                     stale_lists.remove(index);
                 }
 
+                // 判断远程版本与本地版本是否一致
                 if self.needs_download(remote) {
                     info!("updating playlist {} (index: {})", remote.name, index);
                     let mut playlist: Playlist = remote.clone();
                     playlist.tracks = None;
+                    // 加载歌单歌曲
                     playlist.load_tracks(&self.spotify);
                     self.append_or_update(playlist);
                     // trigger redraw
+                    // 触发重绘
                     self.trigger_redraw();
                 }
             }
@@ -541,14 +553,17 @@ impl Library {
         *self.tracks.write().unwrap() = tracks;
     }
 
+    /// 填充artists数据
     fn populate_artists(&self) {
         // Remove old unfollowed artists
+        // 移除未关注歌手
         {
             let mut artists = self.artists.write().unwrap();
             *artists = artists.iter().filter(|a| a.is_followed).cloned().collect();
         }
 
         // Add artists that aren't followed but have saved tracks
+        // 添加未关注歌手，但有关注歌曲的歌手
         {
             let tracks = self.tracks.read().unwrap();
             let mut track_artists: Vec<(&String, &String)> = tracks
@@ -570,6 +585,7 @@ impl Library {
             artist.tracks = Some(Vec::new());
         }
 
+        // 排序
         artists.sort_unstable_by(|a, b| {
             let a_cmp = a.name.strip_prefix("The ").unwrap_or(&a.name);
             let b_cmp = b.name.strip_prefix("The ").unwrap_or(&b.name);
@@ -578,13 +594,19 @@ impl Library {
         });
 
         // Add saved tracks to artists
+        // 将关注的歌曲添加到歌手歌曲目录下
         {
+            // 遍历关注的歌曲
             let tracks = self.tracks.read().unwrap();
             for track in tracks.iter() {
+                // 遍历关注的歌曲歌手
                 for artist_id in &track.artist_ids {
+                    // 获取歌手在artists中的索引
                     let index = if let Some(i) = lookup.get(artist_id).cloned() {
+                        // 如果在缓存hashmap中
                         i
                     } else {
+                        // 遍历artists获取
                         let i = artists
                             .iter()
                             .position(|a| &a.id.clone().unwrap_or_default() == artist_id);
@@ -594,15 +616,17 @@ impl Library {
 
                     if let Some(i) = index {
                         let artist = artists.get_mut(i).unwrap();
+                        // 如果为none,则进行初始化
                         if artist.tracks.is_none() {
                             artist.tracks = Some(Vec::new());
                         }
 
                         if let Some(tracks) = artist.tracks.as_mut() {
+                            // 存在该曲目，则终止本次循环
                             if tracks.iter().any(|t| t.id == track.id) {
                                 continue;
                             }
-
+                            // 添加到歌手歌曲目录下
                             tracks.push(track.clone());
                         }
                     }

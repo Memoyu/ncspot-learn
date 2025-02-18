@@ -36,20 +36,28 @@ pub enum QueueEvent {
 
 /// The queue determines the playback order of [Playable] items, and is also used to control
 /// playback itself.
+/// 播放歌曲列表，同时控制播放器
 pub struct Queue {
     /// The internal data, which doesn't change with shuffle or repeat. This is
     /// the raw data only.
+    /// 播放列表，原始数据
     pub queue: Arc<RwLock<Vec<Playable>>>,
     /// The playback order of the queue, as indices into `self.queue`.
+    /// 播放列表播放顺序，存储queue的索引
     random_order: RwLock<Option<Vec<usize>>>,
+    // 当前播放的歌曲，queue的索引
     current_track: RwLock<Option<usize>>,
+    // Spotify实例
     spotify: Spotify,
+    // 配置实例
     cfg: Arc<Config>,
+    // library实例
     library: Arc<Library>,
 }
 
 impl Queue {
     pub fn new(spotify: Spotify, cfg: Arc<Config>, library: Arc<Library>) -> Self {
+        // 获取播放列表状态缓存
         let queue_state = cfg.state().queuestate.clone();
 
         Self {
@@ -64,20 +72,27 @@ impl Queue {
 
     /// The index of the next item in `self.queue` that should be played. None
     /// if at the end of the queue.
+    /// 获取下一首歌曲的索引，如果是队列的最后一首，则返回None
     pub fn next_index(&self) -> Option<usize> {
         match *self.current_track.read().unwrap() {
             Some(mut index) => {
                 let random_order = self.random_order.read().unwrap();
+                // 如果随机播放列表不为空
                 if let Some(order) = random_order.as_ref() {
+                    // 获取当前播放歌曲索引（queue对应索引）在random_order中对应的索引
                     index = order.iter().position(|&i| i == index).unwrap();
                 }
 
                 let mut next_index = index + 1;
+                // 索引大于队列长度时，则返回None
                 if next_index < self.queue.read().unwrap().len() {
+                    // 如果随机播放列表不为空
                     if let Some(order) = random_order.as_ref() {
+                        // 获取随机播放列表对应索引的值（queue对应索引）
                         next_index = order[next_index];
                     }
 
+                    // queue对应索引
                     Some(next_index)
                 } else {
                     None
@@ -89,6 +104,7 @@ impl Queue {
 
     /// The index of the previous item in `self.queue` that should be played.
     /// None if at the start of the queue.
+    /// 获取上一首歌曲的索引，如果是队列的第一首，则返回None
     pub fn previous_index(&self) -> Option<usize> {
         match *self.current_track.read().unwrap() {
             Some(mut index) => {
@@ -113,43 +129,56 @@ impl Queue {
     }
 
     /// The currently playing item from `self.queue`.
+    /// 获取当前播放的歌曲
     pub fn get_current(&self) -> Option<Playable> {
         self.get_current_index()
             .map(|index| self.queue.read().unwrap()[index].clone())
     }
 
     /// The index of the currently playing item from `self.queue`.
+    /// 获取当前播放的歌曲的索引
     pub fn get_current_index(&self) -> Option<usize> {
         *self.current_track.read().unwrap()
     }
 
     /// Insert `track` as the item that should logically follow the currently
     /// playing item, taking into account shuffle status.
+    /// 插入歌曲到当前播放歌曲后面
     pub fn insert_after_current(&self, track: Playable) {
         if let Some(index) = self.get_current_index() {
             let mut random_order = self.random_order.write().unwrap();
             if let Some(order) = random_order.as_mut() {
+                // 更新随机播放列表中的queue索引
                 let next_i = order.iter().position(|&i| i == index).unwrap();
                 // shift everything after the insertion in order
+                // 对随机播放列表中大于current_track index的queue索引进行加1
                 for item in order.iter_mut() {
                     if *item > index {
                         *item += 1;
                     }
                 }
                 // finally, add the next track index
+                // 再插入下一首歌曲的索引到random_order中
                 order.insert(next_i + 1, index + 1);
             }
+
+            // 再插入下一首歌曲到queue中
             let mut q = self.queue.write().unwrap();
             q.insert(index + 1, track);
         } else {
+            // 没有当前播放歌曲，则插入到队列的末尾
             self.append(track);
         }
     }
 
     /// Add `track` to the end of the queue.
+    /// 将歌曲插入到队列的末尾
     pub fn append(&self, track: Playable) {
         let mut random_order = self.random_order.write().unwrap();
         if let Some(order) = random_order.as_mut() {
+            // 饱和减法
+            // 出现溢出时，不发生报错，返回最小值，usize最小值为0
+            // random_order长度与queue长度一致，当前index为queue最后一个元素的下标
             let index = order.len().saturating_sub(1);
             order.push(index);
         }
@@ -160,6 +189,7 @@ impl Queue {
 
     /// Append `tracks` after the currently playing item, taking into account
     /// shuffle status. Returns the amount of added items.
+    /// 将歌曲插入到当前曲目之后，考虑顺序播放状态。返回添加的曲目数量
     pub fn append_next(&self, tracks: &Vec<Playable>) -> usize {
         let mut q = self.queue.write().unwrap();
 
@@ -327,11 +357,14 @@ impl Queue {
 
     /// Toggle the playback. If playback is currently stopped, this will either
     /// play the next song if one is available, or restart from the start.
+    /// 切换播放状态（播放/暂停）
     pub fn toggleplayback(&self) {
         match self.spotify.get_current_status() {
+            // 当前播放状态为播放/暂停，则切换播放状态
             PlayerEvent::Playing(_) | PlayerEvent::Paused(_) => {
                 self.spotify.toggleplayback();
             }
+            // 当前状态状态为停止，则播放下一首或播放第一首
             PlayerEvent::Stopped => match self.next_index() {
                 Some(_) => self.next(false),
                 None => self.play(0, false, false),
@@ -341,6 +374,7 @@ impl Queue {
     }
 
     /// Stop playback.
+    /// 停止播放
     pub fn stop(&self) {
         let mut current = self.current_track.write().unwrap();
         *current = None;
@@ -352,21 +386,31 @@ impl Queue {
     /// `manual`: If this is true, normal queue logic like repeat will not be
     /// used, and the next track will actually be played. This should be used
     /// when going to the next entry in the queue is the wanted behavior.
+    /// 播放下一首
     pub fn next(&self, manual: bool) {
         let q = self.queue.read().unwrap();
         let current = *self.current_track.read().unwrap();
         let repeat = self.cfg.state().repeat;
 
+        // 如果当前循环模式为单曲循环，且不是手动切歌
         if repeat == RepeatSetting::RepeatTrack && !manual {
+            // 继续重新播放当前歌曲
             if let Some(index) = current {
                 self.play(index, false, false);
             }
         } else if let Some(index) = self.next_index() {
             self.play(index, false, false);
+
+            // 如果当前循环模式为单曲循环，且为手动切歌
             if repeat == RepeatSetting::RepeatTrack && manual {
+                // 将循环模式配置为列表循环
                 self.set_repeat(RepeatSetting::RepeatPlaylist);
             }
         } else if repeat == RepeatSetting::RepeatPlaylist && q.len() > 0 {
+            // 如果上述条件都不符合，且循环模式为列表循环、队列部位空时
+            // 则获取random_order列表的第一个
+            // 不存在时则播放queue列表的第一个
+
             let random_order = self.random_order.read().unwrap();
             self.play(
                 random_order.as_ref().map(|o| o[0]).unwrap_or(0),
@@ -374,11 +418,13 @@ impl Queue {
                 false,
             );
         } else {
+            // 否则停止播放
             self.spotify.stop();
         }
     }
 
     /// Play the previous item in the queue.
+    /// 播放上一首
     pub fn previous(&self) {
         let q = self.queue.read().unwrap();
         let current = *self.current_track.read().unwrap();
@@ -423,6 +469,7 @@ impl Queue {
     }
 
     /// (Re)generate the random shuffle order.
+    /// 生成随机播放顺序
     fn generate_random_order(&self) {
         let q = self.queue.read().unwrap();
         let mut order: Vec<usize> = Vec::with_capacity(q.len());

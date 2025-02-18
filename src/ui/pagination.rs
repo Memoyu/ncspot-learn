@@ -49,6 +49,7 @@ impl<I: ListItem + Clone> ApiResult<I> {
         *self.offset.read().unwrap()
     }
 
+    /// 是否已到达分页末尾
     pub fn at_end(&self) -> bool {
         (self.offset() + self.limit) >= self.total
     }
@@ -65,6 +66,7 @@ impl<I: ListItem + Clone> ApiResult<I> {
         )
     }
 
+    /// 请求下一页数据
     pub fn next(&self) -> Option<Vec<I>> {
         let offset = self.offset() + self.limit;
         debug!("fetching next page at offset {}", offset);
