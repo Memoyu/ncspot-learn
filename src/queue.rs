@@ -45,13 +45,13 @@ pub struct Queue {
     /// The playback order of the queue, as indices into `self.queue`.
     /// 播放列表播放顺序，存储queue的索引
     random_order: RwLock<Option<Vec<usize>>>,
-    // 当前播放的歌曲，queue的索引
+    /// 当前播放的歌曲，queue的索引
     current_track: RwLock<Option<usize>>,
-    // Spotify实例
+    /// Spotify实例
     spotify: Spotify,
-    // 配置实例
+    /// 配置实例
     cfg: Arc<Config>,
-    // library实例
+    /// library实例
     library: Arc<Library>,
 }
 
@@ -189,7 +189,7 @@ impl Queue {
 
     /// Append `tracks` after the currently playing item, taking into account
     /// shuffle status. Returns the amount of added items.
-    /// 将歌曲插入到当前曲目之后，考虑顺序播放状态。返回添加的曲目数量
+    /// 将歌曲插入到当前曲目之后，考虑顺序播放状态。返回添加的曲目第一条的索引
     pub fn append_next(&self, tracks: &Vec<Playable>) -> usize {
         let mut q = self.queue.write().unwrap();
 
