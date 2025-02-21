@@ -216,6 +216,7 @@ impl Queue {
 
     /// Remove the item at `index`. This doesn't take into account shuffle
     /// status, and will literally remove the item at `index` in `self.queue`.
+    /// 删除指定索引的曲目, 不考虑随机播放, 直接删除self.queue索引
     pub fn remove(&self, index: usize) {
         {
             let mut q = self.queue.write().unwrap();
@@ -227,6 +228,7 @@ impl Queue {
         }
 
         // if the queue is empty stop playback
+        // 删除完了再看看，空的话就停止播放
         let len = self.queue.read().unwrap().len();
         if len == 0 {
             self.stop();
@@ -238,21 +240,32 @@ impl Queue {
         // of the one we deleted
         let current = *self.current_track.read().unwrap();
         if let Some(current_track) = current {
+            // 比对当前播放的索引和删除的索引
             match current_track.cmp(&index) {
+                // current_track = index 相等
                 Ordering::Equal => {
                     // if we have deleted the last item and it was playing
                     // stop playback, unless repeat playlist is on, play next
+                    // 如果是列表最后一首歌曲
                     if current_track == len {
+                        // 如果循环模式为列表循环
                         if self.get_repeat() == RepeatSetting::RepeatPlaylist {
+                            // 播放下一首
                             self.next(false);
                         } else {
+                            // 否则，停止播放
                             self.stop();
                         }
                     } else {
+                        // queue下指定index的各歌曲已被删除，此时index对应的是新的一首歌曲
+                        // 继续播放这首新的歌曲
                         self.play(index, false, false);
                     }
                 }
+                // current_track > index 大于
                 Ordering::Greater => {
+                    // 向前移动一位
+                    // 索引减少1
                     let mut current = self.current_track.write().unwrap();
                     current.replace(current_track - 1);
                 }
@@ -260,18 +273,21 @@ impl Queue {
             }
         }
 
+        // 如果随机播放，则重新生成播放顺序
         if self.get_shuffle() {
             self.generate_random_order();
         }
     }
 
     /// Clear all the items from the queue and stop playback.
+    /// 清空列表项，并停止播放
     pub fn clear(&self) {
         self.stop();
 
         let mut q = self.queue.write().unwrap();
         q.clear();
 
+        // 清空随机列表
         let mut random_order = self.random_order.write().unwrap();
         if let Some(o) = random_order.as_mut() {
             o.clear()
@@ -279,18 +295,23 @@ impl Queue {
     }
 
     /// The amount of items in `self.queue`.
+    /// queue列表歌曲数量
     pub fn len(&self) -> usize {
         self.queue.read().unwrap().len()
     }
 
     /// Shift the item at `from` in `self.queue` to `to`.
+    /// 将queue中的from项移动到to位置
     pub fn shift(&self, from: usize, to: usize) {
         let mut queue = self.queue.write().unwrap();
+        // 先移除
         let item = queue.remove(from);
+        // 再插入
         queue.insert(to, item);
 
         // if the currently playing track is affected by the shift, update its
         // index
+        // 如果当前播放索引被移动影响了，更新索引
         let mut current = self.current_track.write().unwrap();
         if let Some(index) = *current {
             if index == from {
@@ -308,9 +329,16 @@ impl Queue {
     /// `reshuffle`: Reshuffle the current order of the queue.
     /// `shuffle_index`: If this is true, `index` isn't actually used, but is
     /// chosen at random as a valid index in the queue.
+    ///
+    /// 播放指定index的歌曲
+    ///
+    /// reshuffle: 重新生成随机播放顺序
+    /// shuffle_index: 使用随机生成索引 如果为true,则实际上index不会使用，而是随机选取queue的索引
     pub fn play(&self, mut index: usize, reshuffle: bool, shuffle_index: bool) {
         let queue_length = self.queue.read().unwrap().len();
         // The length of the queue must be bigger than 0 or gen_range panics!
+        // 队列长度必须大于0，否者程序会panics
+        // 生成随机索引
         if queue_length > 0 && shuffle_index && self.get_shuffle() {
             let mut rng = rand::thread_rng();
             index = rng.gen_range(0..queue_length);
@@ -318,14 +346,17 @@ impl Queue {
 
         if let Some(track) = &self.queue.read().unwrap().get(index) {
             self.spotify.load(track, true, 0);
+            // 替换当前播放索引
             let mut current = self.current_track.write().unwrap();
             current.replace(index);
+            //
             self.spotify.update_track();
 
             #[cfg(feature = "notify")]
             if self.cfg.values().notify.unwrap_or(false) {
                 std::thread::spawn({
                     // use same parser as track_format, Playable::format
+                    // 获取配置的通知格式
                     let format = self
                         .cfg
                         .values()
@@ -338,6 +369,7 @@ impl Queue {
                     let default_body = crate::config::NotificationFormat::default().body.unwrap();
                     let body = format.body.unwrap_or_else(|| default_body.clone());
 
+                    // 根据模板生成文本
                     let summary_txt = Playable::format(track, &title, &self.library);
                     let body_txt = Playable::format(track, &body, &self.library);
                     let cover_url = track.cover_url();
@@ -449,21 +481,25 @@ impl Queue {
     }
 
     /// Get the current repeat behavior.
+    /// 获取当前配置的循环状态
     pub fn get_repeat(&self) -> RepeatSetting {
         self.cfg.state().repeat
     }
 
     /// Set the current repeat behavior and save it to the configuration.
+    /// 设置当前配置的循环状态
     pub fn set_repeat(&self, new: RepeatSetting) {
         self.cfg.with_state_mut(|s| s.repeat = new);
     }
 
     /// Get the current shuffle behavior.
+    /// 获取当前配置的随机播放状态
     pub fn get_shuffle(&self) -> bool {
         self.cfg.state().shuffle
     }
 
     /// Get the current order that is used to shuffle.
+    /// 获取随机播放列表
     pub fn get_random_order(&self) -> Option<Vec<usize>> {
         self.random_order.read().unwrap().clone()
     }
@@ -481,7 +517,9 @@ impl Queue {
         }
 
         let mut rng = rand::thread_rng();
+        // 将可变切片原地打乱
         random.shuffle(&mut rng);
+        // 追加随机顺序
         order.extend(random);
 
         let mut random_order = self.random_order.write().unwrap();
@@ -489,6 +527,7 @@ impl Queue {
     }
 
     /// Set the current shuffle behavior.
+    /// 设置随机播放状态
     pub fn set_shuffle(&self, new: bool) {
         self.cfg.with_state_mut(|s| s.shuffle = new);
         if new {
@@ -500,6 +539,7 @@ impl Queue {
     }
 
     /// Handle events that are specific to the queue.
+    /// 处理指定的队列事件
     pub fn handle_event(&self, event: QueueEvent) {
         match event {
             QueueEvent::PreloadTrackRequest => {

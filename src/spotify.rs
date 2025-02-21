@@ -63,10 +63,10 @@ pub struct Spotify {
     status: Arc<RwLock<PlayerEvent>>,
     pub api: WebApi,
     /// The amount of the current [Playable] that had elapsed when last paused.
-    /// 上次暂停时已经播放的进度
+    /// TODO: 暂停时，已经播放的时长
     elapsed: Arc<RwLock<Option<Duration>>>,
     /// The amount of the current [Playable] that has been played in total.
-    /// 总播放进度
+    /// TODO: 猜测：播放时的系统时间
     since: Arc<RwLock<Option<SystemTime>>>,
     /// Channel to send commands to the worker thread.
     /// 向工作线程发送指令通道
@@ -312,6 +312,7 @@ impl Spotify {
     }
 
     /// Get the total amount of the current [Playable] that has been played.
+    /// 获取当前播放进度
     pub fn get_current_progress(&self) -> Duration {
         self.get_elapsed().unwrap_or_else(|| Duration::from_secs(0))
             + self
@@ -320,6 +321,7 @@ impl Spotify {
                 .unwrap_or_else(|| Duration::from_secs(0))
     }
 
+    ///
     fn set_elapsed(&self, new_elapsed: Option<Duration>) {
         let mut elapsed = self.elapsed.write().unwrap();
         *elapsed = new_elapsed;
@@ -330,6 +332,7 @@ impl Spotify {
         *elapsed
     }
 
+    ///
     fn set_since(&self, new_since: Option<SystemTime>) {
         let mut since = self.since.write().unwrap();
         *since = new_since;
@@ -342,6 +345,11 @@ impl Spotify {
 
     /// Load `track` into the [Player]. Start playing immediately if
     /// `start_playing` is true. Start playing from `position_ms` in the song.
+    ///
+    /// 将歌曲加载到播放器
+    ///
+    /// start_playing: 是否立即播放
+    /// position_ms: 从歌曲的第几秒开始播放
     pub fn load(&self, track: &Playable, start_playing: bool, position_ms: u32) {
         info!("loading track: {:?}", track);
         self.send_worker(WorkerCommand::Load(
@@ -382,6 +390,7 @@ impl Spotify {
 
     /// Reset the time tracking stats for the current song. This should be called when a new song is
     /// loaded.
+    /// 更新歌曲播放信息
     pub fn update_track(&self) {
         self.set_elapsed(None);
         self.set_since(None);

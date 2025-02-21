@@ -20,6 +20,7 @@ pub enum Playable {
 }
 
 impl Playable {
+    // 解析替换模板关键字
     pub fn format(playable: &Self, formatting: &str, library: &Library) -> String {
         formatting
             .replace(
